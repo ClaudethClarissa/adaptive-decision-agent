@@ -1,0 +1,83 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+
+# Virtual environments and local configuration
+.venv/
+venv/
+env/
+.env
+.env.*
+!.env.example
+.python-version
+
+# Local Conda environments (keep reproducible environment specifications)
+.conda/
+conda-env/
+conda-envs/
+envs/
+adaptive-agent/
+
+# Credentials and private keys
+.aws/
+.ssh/
+.credentials/
+credentials.json
+credentials.local.*
+secrets.json
+secrets.toml
+.streamlit/secrets.toml
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Local temporary and backup files
+tmp/
+temp/
+.tmp/
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
+
+# Build and packaging output
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Coverage and test output
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+junit.xml
+
+# Notebook checkpoints
+.ipynb_checkpoints/
+
+# Generated datasets (retain directory documentation)
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+
+# Local experiment output
+artifacts/
+outputs/
+logs/
+*.log
+
+# Editor and operating system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
