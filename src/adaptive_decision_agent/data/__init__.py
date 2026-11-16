@@ -1,1 +1,1 @@
-"""Reserved for reproducible synthetic dataset generation."""
+"""Reproducible synthetic dataset generation; see the synthetic module."""

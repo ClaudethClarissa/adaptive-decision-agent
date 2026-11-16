@@ -3,9 +3,10 @@
 An incremental research and portfolio project exploring how a tool-using AI agent
 can support inventory purchasing decisions under uncertainty and budget constraints.
 
-**Current status:** initial project scaffolding only. No dataset generator,
-simulation, optimization, forecasting, decision agent, evaluation runner, or
-dashboard has been implemented.
+**Current status:** Phase 1 synthetic data generation is implemented. See
+[synthetic data documentation](docs/synthetic_data.md) for ranges, assumptions,
+validation, and the seed-42 generation command. Simulation, optimization,
+forecasting, decision agents, evaluation runners, and the dashboard remain future work.
 
 ## Scientific motivation
 
@@ -38,15 +39,24 @@ use, and decision traceability will be central to the project.
 | Products | 50 |
 | Suppliers | 3 |
 | Purchasing budget | $20,000 per decision period |
-| Demand | Stochastic product demand |
-| Replenishment | Supplier lead times |
+| Demand | Independent Poisson demand; product rates uniform 1-3.8 units/day |
+| Unit purchase costs | Uniform $10-$30 |
+| Replenishment | Supplier lead times of 2-5 days |
+| Initial inventory | ceil(demand rate * (lead time + 2 safety-coverage days)) |
 | Costs | Purchasing costs, inventory holding costs, and stockout penalties |
 | Simulation horizon | 30 days |
 | Purchasing frequency | Weekly |
 
-Before implementation, the environment specification will define demand
-distributions, product-to-supplier relationships, lead-time assumptions, initial
-inventory, purchase quantities, and the treatment of unmet demand. It will also
+The generator calibrates population-average weekly replacement purchasing to
+approximately $16,800 (84% of the $20,000 budget), without rescaling samples or
+clipping demand. Individual seeds and realized weeks can differ. Initial stock
+covers expected lead-time demand plus two days; this is an illustrative starting
+rule, not an optimized reorder policy or a guaranteed service level. It does not
+cover a full weekly review period plus lead time. Budget headroom alone does not
+establish profitability or stockout-free operation.
+
+Before simulation implementation, the environment specification will define
+purchase quantities and the treatment of unmet demand. It will also
 define event ordering, decision days, budget reset rules, and how outstanding
 orders and remaining stock are treated at the horizon. These choices will be
 documented so strategy comparisons share the same operational assumptions.
@@ -75,6 +85,9 @@ components; demand fill rate; stockout frequency; budget utilization; and
 constraint violations. Agent evaluation will additionally track tool failures,
 latency, and model usage cost. Metric definitions and terminal inventory
 accounting will be fixed before comparing strategies.
+The synthetic stockout penalty represents an additional service cost and excludes
+lost margin. A future profit objective must not also charge lost margin already
+reflected in unrealized sales revenue.
 
 ## Project structure
 
@@ -101,9 +114,9 @@ adaptive-decision-agent/
     `-- README.md
 ```
 
-Source subpackages currently contain only package markers. The tests directory
-is reserved for future tests; there are no algorithm implementations or tests yet.
-The dashboard will be added in a later phase.
+The data package contains the synthetic generator, with tests in `tests/`.
+Other source subpackages contain only package markers. The dashboard will be
+added in a later phase.
 
 ## Local setup
 
@@ -131,20 +144,20 @@ Install the package and optional development tools:
 python -m pip install -e ".[dev]"
 ```
 
-The project currently has no runtime dependencies. Setuptools provides packaging,
-and pytest is the sole optional development dependency. Numerical, statistical,
-optimization, LLM-provider, and dashboard dependencies will be added only when
-their corresponding components are implemented.
+NumPy and pandas support synthetic data generation and CSV export. Setuptools
+provides packaging, and pytest is the sole optional development dependency.
+Other dependencies will be added when their components are implemented.
 
-Once tests exist, run them with `python -m pytest`. At this scaffolding stage,
-pytest will report no tests collected and exit with code 5. There is no application
-entry point yet, and setup does not require an API key.
+Run tests with `python -m pytest`. Generate example data with
+`python -m adaptive_decision_agent.data.synthetic --seed 42`.
+Setup does not require an API key. When using Conda, use the dedicated
+`adaptive-agent` environment instead of creating an additional virtual environment.
 
 ## Development roadmap
 
 - [x] Create modular packaging, directory structure, and initial documentation.
 - [ ] Specify environment assumptions, data schemas, and evaluation metrics.
-- [ ] Implement and validate a seeded synthetic dataset generator.
+- [x] Implement and validate a seeded synthetic dataset generator.
 - [ ] Implement the inventory simulation and test its state and cost accounting.
 - [ ] Establish simple purchasing and traditional optimization baselines.
 - [ ] Implement statistical demand forecasts and time-ordered validation.
