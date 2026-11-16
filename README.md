@@ -5,8 +5,11 @@ can support inventory purchasing decisions under uncertainty and budget constrai
 
 **Current status:** Phase 1 synthetic data generation is implemented. See
 [synthetic data documentation](docs/synthetic_data.md) for ranges, assumptions,
-validation, and the seed-42 generation command. Simulation, optimization,
+validation, and the seed-42 generation command. Optimization,
 forecasting, decision agents, evaluation runners, and the dashboard remain future work.
+Phase 2A adds a deterministic lost-sales inventory engine with external order
+schedules or policy callbacks receiving only decision-time information; see
+[simulation timing and accounting](docs/inventory_simulation.md).
 
 ## Scientific motivation
 
@@ -115,8 +118,9 @@ adaptive-decision-agent/
 ```
 
 The data package contains the synthetic generator, with tests in `tests/`.
-Other source subpackages contain only package markers. The dashboard will be
-added in a later phase.
+The simulation package provides deterministic daily accounting with external
+orders. Other source subpackages contain only package markers. The dashboard
+will be added in a later phase.
 
 ## Local setup
 
@@ -158,7 +162,7 @@ Setup does not require an API key. When using Conda, use the dedicated
 - [x] Create modular packaging, directory structure, and initial documentation.
 - [ ] Specify environment assumptions, data schemas, and evaluation metrics.
 - [x] Implement and validate a seeded synthetic dataset generator.
-- [ ] Implement the inventory simulation and test its state and cost accounting.
+- [x] Implement deterministic inventory simulation and test state and cost accounting.
 - [ ] Establish simple purchasing and traditional optimization baselines.
 - [ ] Implement statistical demand forecasts and time-ordered validation.
 - [ ] Add an LLM decision agent with tool calling and order validation.
