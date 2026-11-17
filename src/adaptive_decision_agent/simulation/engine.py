@@ -15,6 +15,7 @@ ORDER_COLUMNS = ("order_day", "product_id", "quantity", "arrival_day", "purchase
 POLICY_PRODUCT_COLUMNS = (
     "product_id", "supplier_id", "unit_cost", "selling_price",
     "holding_cost_per_unit_day", "stockout_penalty_per_unit", "lead_time_days",
+    "estimated_demand_rate",
 )
 
 
@@ -70,6 +71,7 @@ def simulate(
     horizon: int = 30,
     weekly_budget: float = 20_000,
     policy: Callable[[PolicyObservation], Mapping[str, int]] | None = None,
+    historical_demand: pd.DataFrame | None = None,
 ) -> SimulationResult:
     """Run a precommitted schedule or one policy call per decision day.
 
@@ -109,6 +111,22 @@ def simulate(
         observed[day, p] = _integer(row["demand"], "demand")
     if len(observed) != horizon * len(ids):
         raise ValueError("Demand must cover every product on every simulation day exactly once")
+
+    history = []
+    if historical_demand is not None:
+        if (not historical_demand.columns.is_unique
+                or not {"day", "product_id", "demand"}.issubset(historical_demand.columns)):
+            raise ValueError("Historical demand requires day, product_id, and demand columns")
+        past = {}
+        for row in historical_demand.to_dict("records"):
+            day = _integer(row["day"], "historical day", -59)
+            p = row["product_id"]
+            if not isinstance(p, str) or p not in stock or day > 0 or (day, p) in past:
+                raise ValueError("Invalid or duplicate historical day/product")
+            past[day, p] = _integer(row["demand"], "historical demand")
+        if len(past) != 60 * len(ids):
+            raise ValueError("Historical demand must cover days -59 through 0 for every product")
+        history = [(day, p, past[day, p]) for day in range(-59, 1) for p in ids]
 
     schedule = {} if order_schedule is None else order_schedule
     if not isinstance(schedule, Mapping):
@@ -152,7 +170,6 @@ def simulate(
         purchases[day, p] = order["purchase_cost"]
     outstanding = dict.fromkeys(ids, 0)
     rows = []
-    history = []
     known_products = catalog[[column for column in POLICY_PRODUCT_COLUMNS if column in catalog]].copy(deep=True)
     for day in range(1, horizon + 1):
         if policy is not None and day in decisions:

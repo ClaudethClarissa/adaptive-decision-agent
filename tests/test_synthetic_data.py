@@ -1,158 +1,170 @@
-"""Behavioral checks for reproducible synthetic inventory data."""
+"""History-based initialization, separated streams, and business data contracts."""
+
+import hashlib
+from fractions import Fraction
 
 import numpy as np
 import pandas as pd
 import pytest
 from pandas.testing import assert_frame_equal
 
+from adaptive_decision_agent.data import synthetic as module
 from adaptive_decision_agent.data.synthetic import (
-    WEEKLY_BUDGET, expected_weekly_replenishment_cost,
-    generate_data, generate_demand, validate_data, write_csv,
+    estimate_demand_rates, expected_weekly_replenishment_cost,
+    generate_data, researcher_diagnostics, validate_data, write_csv,
 )
 
 
-def test_reproducibility():
-    first = generate_data()
-    second = generate_data(42)
-    for left, right in zip(first, second):
-        assert_frame_equal(left, right)
-    other = generate_data(43)
-    assert not first[0].equals(other[0])
-    assert not first[1].equals(other[1])
+def test_reproducibility_and_seed_variation():
+    for a, b in zip(generate_data(), generate_data(42)):
+        assert_frame_equal(a, b)
+    for a, b in zip(generate_data(42), generate_data(43)):
+        assert not a.equals(b)
 
 
-@pytest.mark.parametrize("seed", [0, 42, 1234])
-def test_dimensions_and_validity(seed):
-    catalog, demand = generate_data(seed)
-    validate_data(catalog, demand)
-    assert catalog.shape == (50, 9)
-    assert demand.shape == (1500, 3)
-    assert catalog.product_id.nunique() == 50
-    assert set(catalog.supplier_id) == {"S001", "S002", "S003"}
-    assert demand.groupby("product_id").size().eq(30).all()
-    assert demand.demand.ge(0).all()
-    assert demand.demand.mod(1).eq(0).all()
-    assert catalog.selling_price.gt(catalog.unit_cost).all()
+def test_seed42_evaluation_preserved_from_phase2a():
+    _, _, evaluation = generate_data(42)
+    digest = hashlib.sha256(evaluation.to_csv(index=False, lineterminator="\n").encode()).hexdigest()
+    # Captured from the unchanged Phase 2A generator before Phase 3A edits.
+    assert digest == "f3f851adf126b088ee4b005d0e688177f95ffb1d5eaf3e65c21cbad62f4162cb"
 
 
-def test_demand_independent_of_available_stock():
-    catalog, _ = generate_data()
-    empty_stock = catalog.copy()
-    empty_stock["initial_stock"] = 0
-    original = generate_demand(catalog, np.random.default_rng(123))
-    changed = generate_demand(empty_stock, np.random.default_rng(123))
-    assert_frame_equal(original, changed)
-    assert changed.demand.sum() > 0
+@pytest.mark.parametrize("seed", [0, 1, 42, 1234])
+def test_dimensions_validity_and_exact_initialization(seed):
+    c, h, d = generate_data(seed)
+    validate_data(c, h, d)
+    assert c.shape == (50, 9)
+    assert h.shape == (3000, 3)
+    assert d.shape == (1500, 3)
+    assert set(h.day) == set(range(-59, 1))
+    assert set(d.day) == set(range(1, 31))
+    assert h.groupby("product_id").size().eq(60).all()
+    assert d.groupby("product_id").size().eq(30).all()
+    means = h.groupby("product_id").demand.mean().reindex(c.product_id)
+    np.testing.assert_allclose(c.estimated_demand_rate, means, rtol=0, atol=0)
+    totals = h.groupby("product_id").demand.sum()
+    # Fraction is an independent exact-rational reference for ceil.
+    expected = [int(np.ceil(Fraction(int(totals[r.product_id]) * (r.lead_time_days + 2), 60)))
+                for r in c.itertuples()]
+    np.testing.assert_array_equal(c.initial_stock, expected)
+    assert c.unit_cost.between(10, 30).all()
+    assert c.lead_time_days.between(2, 5).all()
+    assert c.selling_price.gt(c.unit_cost).all()
+    assert not any("true" in col or "latent" in col or col == "daily_demand_rate" for col in c.columns)
+
+
+def test_independent_streams_share_latent_rates():
+    seeds = np.random.SeedSequence(42).spawn(3)
+    params, rates = module._generate_parameters(np.random.default_rng(seeds[0]))
+    _, h, d = generate_data(42)
+    expected_eval = module._sample_demand(params.product_id, rates, np.random.default_rng(seeds[1]), range(1, 31))
+    expected_history = module._sample_demand(params.product_id, rates, np.random.default_rng(seeds[2]), range(-59, 1))
+    assert_frame_equal(d, expected_eval)
+    assert_frame_equal(h, expected_history)
+    assert not np.array_equal(h.demand.to_numpy()[:1500], d.demand.to_numpy())
+
+
+@pytest.mark.parametrize("historical_count", [0, 100])
+def test_initialization_uses_history_without_true_rate_corrections(monkeypatch, historical_count):
+    sampler = module._sample_demand
+    _, _, original_eval = generate_data()
+
+    def substitute_history(ids, rates, rng, days):
+        result = sampler(ids, rates, rng, days)
+        if result.day.min() < 1:
+            result["demand"] = historical_count
+        return result
+
+    monkeypatch.setattr(module, "_sample_demand", substitute_history)
+    c, h, d = generate_data()
+    assert_frame_equal(original_eval, d)
+    assert c.estimated_demand_rate.eq(historical_count).all()
+    assert c.initial_stock.eq(historical_count * (c.lead_time_days + 2)).all()
+    validate_data(c, h, d)
 
 
 @pytest.mark.parametrize("column,value", [
     ("supplier_id", "S999"), ("unit_cost", -1), ("selling_price", 1),
     ("holding_cost_per_unit_day", -0.1), ("stockout_penalty_per_unit", -1),
-    ("initial_stock", 10.5), ("lead_time_days", 20), ("daily_demand_rate", np.nan),
+    ("initial_stock", 10.5), ("lead_time_days", 20), ("estimated_demand_rate", np.nan),
 ])
 def test_invalid_catalog_rejected(column, value):
-    catalog, demand = generate_data()
-    catalog[column] = catalog[column].astype(object) if isinstance(value, str) else catalog[column].astype(float)
-    catalog.loc[0, column] = value
+    c, h, d = generate_data()
+    c[column] = c[column].astype(object) if isinstance(value, str) else c[column].astype(float)
+    c.loc[0, column] = value
     with pytest.raises(ValueError):
-        validate_data(catalog, demand)
+        validate_data(c, h, d)
 
 
-@pytest.mark.parametrize("problem", ["negative", "fractional", "infinite", "missing_row", "duplicate", "unknown_product", "wrong_day"])
-def test_invalid_demand_rejected(problem):
-    catalog, demand = generate_data()
-    if problem == "missing_row":
-        demand = demand.iloc[:-1]
+@pytest.mark.parametrize("period", ["history", "evaluation"])
+@pytest.mark.parametrize("problem", ["negative", "fractional", "infinite", "missing", "duplicate", "unknown", "wrong_day"])
+def test_invalid_demand_rejected(period, problem):
+    c, h, d = generate_data()
+    frame = h.copy() if period == "history" else d.copy()
+    if problem == "missing":
+        frame = frame.iloc[:-1]
     elif problem == "duplicate":
-        demand.iloc[0] = demand.iloc[1]
-    elif problem == "unknown_product":
-        demand.loc[0, "product_id"] = "P999"
+        frame.iloc[0] = frame.iloc[1]
+    elif problem == "unknown":
+        frame.loc[0, "product_id"] = "P999"
     elif problem == "wrong_day":
-        demand.loc[0, "day"] = 31
+        frame.loc[0, "day"] = 1 if period == "history" else 0
     else:
-        demand["demand"] = demand["demand"].astype(float)
-        demand.loc[0, "demand"] = {"negative": -1, "fractional": 1.5, "infinite": np.inf}[problem]
+        frame["demand"] = frame.demand.astype(float)
+        frame.loc[0, "demand"] = {"negative": -1, "fractional": 1.5, "infinite": np.inf}[problem]
     with pytest.raises(ValueError):
-        validate_data(catalog, demand)
+        validate_data(c, frame if period == "history" else h, frame if period == "evaluation" else d)
 
 
-def test_csv_generation(tmp_path):
-    catalog, demand = generate_data()
-    paths = write_csv(catalog, demand, tmp_path / "nested")
-    assert [path.name for path in paths] == ["product_catalog.csv", "daily_demand.csv"]
-    for expected, path in zip((catalog, demand), paths):
+@pytest.mark.parametrize("problem", ["missing_row", "duplicate_id", "missing_column", "stock_formula", "estimate", "latent_column", "supplier_lead"])
+def test_catalog_contract_rejected(problem):
+    c, h, d = generate_data()
+    if problem == "missing_row":
+        c = c.iloc[:-1]
+    elif problem == "duplicate_id":
+        c.loc[0, "product_id"] = c.loc[1, "product_id"]
+    elif problem == "missing_column":
+        c = c.drop(columns="unit_cost")
+    elif problem == "stock_formula":
+        c.loc[0, "initial_stock"] += 1
+    elif problem == "estimate":
+        c.loc[0, "estimated_demand_rate"] += .1
+    elif problem == "latent_column":
+        c["daily_demand_rate"] = 2.
+    else:
+        c.loc[0, "lead_time_days"] = 2
+        total = int(h[h.product_id == c.loc[0, "product_id"]].demand.sum())
+        c.loc[0, "initial_stock"] = (total * 4 + 59) // 60
+    with pytest.raises(ValueError):
+        validate_data(c, h, d)
+
+
+def test_csv_generation_and_no_latent_exports(tmp_path):
+    data = generate_data()
+    paths = write_csv(*data, tmp_path / "nested")
+    assert [p.name for p in paths] == ["product_catalog.csv", "historical_daily_demand.csv", "daily_demand.csv"]
+    for expected, path in zip(data, paths):
         assert_frame_equal(expected, pd.read_csv(path))
-    validate_data(*(pd.read_csv(path) for path in paths))
-    original_bytes = [path.read_bytes() for path in paths]
-    write_csv(*generate_data(42), tmp_path / "nested")
-    assert original_bytes == [path.read_bytes() for path in paths]
+        assert "daily_demand_rate" not in path.read_text()
+    validate_data(*(pd.read_csv(p) for p in paths))
+    original = [p.read_bytes() for p in paths]
+    write_csv(*generate_data(), tmp_path / "nested")
+    assert original == [p.read_bytes() for p in paths]
 
 
 def test_invalid_export_creates_no_directory(tmp_path):
-    catalog, demand = generate_data()
+    c, h, d = generate_data()
     with pytest.raises(ValueError):
-        write_csv(catalog, demand.iloc[:-1], tmp_path / "invalid")
+        write_csv(c, h.iloc[:-1], d, tmp_path / "invalid")
     assert not (tmp_path / "invalid").exists()
 
 
-@pytest.mark.parametrize("problem", ["missing_row", "duplicate_id", "missing_column", "inconsistent_lead_time"])
-def test_catalog_structure_rejected(problem):
-    catalog, demand = generate_data()
-    if problem == "missing_row":
-        catalog = catalog.iloc[:-1]
-    elif problem == "duplicate_id":
-        catalog.loc[0, "product_id"] = catalog.loc[1, "product_id"]
-    elif problem == "missing_column":
-        catalog = catalog.drop(columns="unit_cost")
-    else:
-        catalog.loc[0, "lead_time_days"] = 2 if catalog.loc[0, "lead_time_days"] != 2 else 3
-        catalog.loc[0, "initial_stock"] = np.ceil(catalog.loc[0, "daily_demand_rate"] * (catalog.loc[0, "lead_time_days"] + 2))
-    with pytest.raises(ValueError):
-        validate_data(catalog, demand)
-
-
-@pytest.mark.parametrize("seed", [0, 1, 42, 1234])
-def test_initial_inventory_uses_exact_coverage_formula(seed):
-    catalog, _ = generate_data(seed)
-    expected = np.ceil(catalog.daily_demand_rate * (catalog.lead_time_days + 2)).astype(int)
-    np.testing.assert_array_equal(catalog.initial_stock, expected)
-    coverage = catalog.initial_stock / catalog.daily_demand_rate
-    assert (coverage >= catalog.lead_time_days + 2).all()
-    assert (coverage < catalog.lead_time_days + 2 + 1 / catalog.daily_demand_rate).all()
-
-
-def test_incorrect_integer_initial_stock_rejected():
-    catalog, demand = generate_data()
-    catalog.loc[0, "initial_stock"] += 1
-    with pytest.raises(ValueError, match="coverage formula"):
-        validate_data(catalog, demand)
-
-
-@pytest.mark.parametrize("seed", [0, 42, 1234])
-def test_calibrated_economic_ranges_and_relationships(seed):
-    c, _ = generate_data(seed)
-    assert c.daily_demand_rate.between(1, 3.8).all()
-    assert c.unit_cost.between(10, 30).all()
-    assert c.lead_time_days.between(2, 5).all()
-    markup = c.selling_price / c.unit_cost
-    assert markup.between(1.1995, 1.8005).all()
-    np.testing.assert_allclose(c.holding_cost_per_unit_day, (c.unit_cost * .001).round(4))
-    assert (c.stockout_penalty_per_unit >= c.unit_cost * .5 - .005001).all()
-    assert (c.stockout_penalty_per_unit <= c.unit_cost * 1.5 + .005001).all()
-
-
-def test_seed42_weekly_budget_calibration():
-    catalog, _ = generate_data(42)
-    cost = expected_weekly_replenishment_cost(catalog)
-    independent = sum(7 * row.daily_demand_rate * row.unit_cost for row in catalog.itertuples())
-    assert cost == pytest.approx(independent)
-    assert WEEKLY_BUDGET == 20_000
-    # A reference-seed regression check, not a requirement imposed on every seed.
-    assert .7 <= cost / WEEKLY_BUDGET <= .9
-
-
-def test_weekly_cost_is_not_clipped_to_budget_target():
-    catalog, _ = generate_data()
-    catalog["daily_demand_rate"] = 4.
-    catalog["unit_cost"] = 30.
-    assert expected_weekly_replenishment_cost(catalog) == 42_000
+def test_estimated_weekly_expenditure_and_research_diagnostics():
+    c, h, _ = generate_data()
+    independent = sum(7 * r.unit_cost * h[h.product_id == r.product_id].demand.mean() for r in c.itertuples())
+    assert expected_weekly_replenishment_cost(c) == pytest.approx(independent)
+    assert .7 <= independent / 20000 <= .9
+    diagnostic = researcher_diagnostics()
+    assert diagnostic["mean_true_rate"] == pytest.approx(2.5146)
+    assert diagnostic["true_expected_weekly_cost"] == pytest.approx(17390.72489)
+    assert diagnostic["estimated_weekly_cost"] == pytest.approx(independent)

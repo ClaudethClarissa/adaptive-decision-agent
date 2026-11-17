@@ -32,7 +32,7 @@ def test_hand_calculated_transitions_and_lost_sales():
 
 
 def test_full_dimensions_balances_and_reproducibility():
-    c, d = generate_data()
+    c, _, d = generate_data()
     schedule = {1: {p: 2 for p in c.product_id}, 8: {"P001": 3}, 29: {"P002": 4}}
     first = simulate(c, d, schedule)
     second = simulate(c.copy(), d.sample(frac=1, random_state=5), schedule)
@@ -89,7 +89,7 @@ def test_exact_budget_and_no_rollover():
 
 
 def test_budget_aggregates_products():
-    c, d = generate_data()
+    c, _, d = generate_data()
     with pytest.raises(ValueError, match="budget"):
         simulate(c, d, {1: {p: 500 for p in c.product_id}})
 
@@ -207,7 +207,7 @@ def test_policy_receives_arrivals_before_ordering():
 
 
 def test_mock_policy_and_schedule_have_identical_results():
-    c, d = generate_data()
+    c, _, d = generate_data()
     schedule = {day: {p: 10 for p in c.product_id} for day in [1, 8, 15, 22, 29]}
     first = simulate(c, d, schedule)
     second = simulate(c, d, policy=lambda observation: schedule[observation.day])
@@ -252,3 +252,78 @@ def test_policy_and_schedule_are_mutually_exclusive():
     c, d = example()
     with pytest.raises(ValueError, match="either"):
         simulate(c, d, {}, horizon=10, policy=lambda observation: {})
+
+
+@pytest.mark.parametrize("divergence_day", [1, 8])
+def test_historical_information_and_nonanticipativity(divergence_day):
+    c, h, d = generate_data()
+    changed = d.copy()
+    changed.loc[changed.day >= divergence_day, "demand"] += 100
+    original_history = h.copy(deep=True)
+    observations = []
+
+    def run(evaluation, history):
+        seen = {}
+
+        def mock(observation):
+            seen[observation.day] = observation
+            assert len(observation.demand_history) == (60 + observation.day - 1) * 50
+            assert observation.demand_history.day.min() == -59
+            assert observation.demand_history.day.max() == observation.day - 1
+            assert (observation.demand_history.day < observation.day).all()
+            assert "daily_demand_rate" not in observation.products
+            return {"P001": 1}
+
+        result = simulate(c, evaluation, policy=mock, historical_demand=history)
+        observations.append(seen)
+        return result
+
+    first = run(d, h)
+    repeated = run(d, h.sample(frac=1, random_state=17))
+    run(changed, h)
+    assert_frame_equal(first.daily, repeated.daily)
+    assert_frame_equal(h, original_history)
+    for day in {1, divergence_day}:
+        left, right = observations[0][day], observations[2][day]
+        assert left.current_inventory == right.current_inventory
+        assert left.remaining_budget == right.remaining_budget
+        for field in ("demand_history", "products", "outstanding_orders"):
+            assert_frame_equal(getattr(left, field), getattr(right, field))
+    expected_history = h.sort_values(["day", "product_id"]).reset_index(drop=True)
+    assert_frame_equal(observations[0][1].demand_history, expected_history)
+    assert observations[0][1].products.estimated_demand_rate.tolist() == c.estimated_demand_rate.tolist()
+
+
+def test_prehistory_does_not_change_inventory_accounting():
+    c, h, d = generate_data()
+    schedule = {1: {"P001": 4}}
+    without = simulate(c, d, schedule)
+    with_history = simulate(c, d, schedule, historical_demand=h)
+    for field in ("daily", "orders", "periods"):
+        assert_frame_equal(getattr(without, field), getattr(with_history, field))
+
+
+@pytest.mark.parametrize("problem", ["missing", "duplicate", "future", "too_early", "unknown", "negative", "fractional", "nan", "bool", "columns"])
+def test_invalid_prehistory_rejected_before_policy_called(problem):
+    c, h, d = generate_data()
+    if problem == "missing":
+        h = h.iloc[:-1]
+    elif problem == "duplicate":
+        h = pd.concat([h, h.iloc[:1]])
+    elif problem in ("future", "too_early"):
+        h.loc[0, "day"] = 1 if problem == "future" else -60
+    elif problem == "unknown":
+        h.loc[0, "product_id"] = "unknown"
+    elif problem == "columns":
+        h = h.drop(columns="demand")
+    elif problem == "bool":
+        h["demand"] = True
+    else:
+        h["demand"] = h.demand.astype(float)
+        h.loc[0, "demand"] = {"negative": -1, "fractional": .5, "nan": np.nan}[problem]
+
+    def forbidden(observation):
+        pytest.fail("Policy must not be called for invalid prehistory")
+
+    with pytest.raises(ValueError):
+        simulate(c, d, policy=forbidden, historical_demand=h)

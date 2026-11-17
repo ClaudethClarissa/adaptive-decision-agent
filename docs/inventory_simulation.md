@@ -5,6 +5,9 @@ demand, and either a precommitted order schedule or a purchasing callback. The d
 days and budget is USD 20,000 per decision period. Smaller horizons (1-30) and
 catalogs are supported for transparent examples and testing. No randomness,
 forecasting, optimization, or AI decisions occur in this engine.
+The [mathematical model](mathematical_model.md) defines variables, equations, and
+examples. The [experimental design](experimental_design.md) describes proposed
+strategy comparisons; the engine does not itself perform those comparisons.
 
 ## Interface
 
@@ -23,6 +26,14 @@ before the run. Alternatively, `simulate(catalog, demand, policy=callback)` call
 its product-to-quantity mapping. Schedule and callback cannot be combined. No
 forecasting or optimization policy is provided.
 
+Phase 3A adds optional `historical_demand=history`. When supplied it must contain
+exactly 60 observations per product on days -59 through 0. Missing/duplicate
+pairs, invalid products, noninteger/negative demand, and out-of-range days are
+rejected before a policy is called. History supplies information only; no stock
+transitions, purchases, or costs are simulated before day 1. Omitting history
+preserves the old empty-history API for existing callers and small tests.
+Supply the common generated history to all policies in Phase 3A experiments.
+
 ### Policy information boundary
 
 `PolicyObservation` supplies detached snapshots, after today's arrivals but before
@@ -34,12 +45,15 @@ today's orders and demand:
   product ID, quantity, order day, arrival day, and purchase cost.
 - `products`: explicitly allowed known catalog fields: product ID, supplier ID
   (when supplied), unit cost, selling price, holding-cost rate, stockout penalty,
-  and lead time. Optional fields are omitted if absent from the input catalog.
+  lead time, and `estimated_demand_rate` when supplied. The estimate comes from
+  known history, not a latent rate. Optional fields are omitted if absent.
 - `remaining_budget`: a Decimal USD balance for the fresh current period. Since
   there is one batch decision per period, this starts at the full allocation.
 - `demand_history`: customer demand for days strictly earlier than the decision
-  day, including unmet customer demand, not merely fulfilled sales. It is empty
-  on day 1. Full historical demand observability is an explicit MVP assumption;
+  day, including unmet customer demand, not merely fulfilled sales. Supplied
+  prehistory gives 60 observations per product on day 1, 67 on day 8, and 88 on
+  day 29. Without prehistory it is empty on day 1.
+  Full historical demand observability is an explicit MVP assumption;
   real businesses may observe only censored sales.
 
 The engine never passes realized demand for today or later days, latent
@@ -49,11 +63,22 @@ of policy observations. Mutating observation tables/dictionaries does not change
 engine accounting. This is an API information boundary, not a security sandbox:
 callers must not give a policy future data through closures, globals, or external
 files. Precomputed schedules also remain the caller's responsibility.
+Earlier initial stock used the true rate and revealed an indirect true-rate
+interval. Phase 3A instead uses the shared historical sample mean; initial stock
+now encodes information already in observable history, not hidden truth.
 
 Non-anticipativity tests use two inputs identical through day 7 and different
 from day 8 onward: their day-8 inventory, pending receipts, known products,
 budget and demand history must match exactly. A separate day-1 divergence check
 verifies that current-day realized demand is absent before the first decision.
+This property is called non-anticipativity: decisions cannot depend on outcomes
+that have not happened. It is essential for fair comparisons because a method
+seeing future demand can order with information that a real decision-maker lacks.
+The tests compare complete observation fields, not just the final order quantity.
+Phase 3A repeats this check with identical 60-day prehistory, verifies information
+at every decision, and confirms that supplied prehistory does not change the
+inventory/cost accounting of a fixed schedule.
+When histories diverge after day 7, later observations may legitimately differ.
 
 The catalog requires unique nonempty string `product_id`, nonnegative integer
 `initial_stock`, positive whole-cent `unit_cost`, positive integer `lead_time_days`,
@@ -141,6 +166,59 @@ day, all 500 units outstanding at day 30 come from the 50 orders placed on day
 29. Their arrival days are 32 and 34 (supplier lead times 3 and 5 days). Their
 $10,027 purchase cost is included in day-29 expenditure, not charged again at
 arrival. This exact pipeline and purchase-ledger reconciliation are tested.
+
+## Verified fixed-order demonstration and Phase 3A update
+
+The original Phase 2A example used the calibrated generator, seed 42, all 50 products,
+and days 1-30. Order ten units of every product on days 1, 8, 15, 22, and 29.
+This is a testing schedule, not an optimized policy, forecasting method, or
+established competitive baseline. It does not attempt to spend the entire budget.
+
+| Observed simulation quantity | Phase 2A | Phase 3A history-based stock |
+| --- | --- | --- |
+| Daily product records | 1,500 (12 columns) | Same |
+| Positive product orders | 250 | Same |
+| Realized evaluation demand | 3,849 units | Same observations |
+| Fulfilled sales | 2,698 units | 2,699 units |
+| Unmet demand | 1,151 units | 1,150 units |
+| Unit fill rate | 70.10% | 70.12% |
+| Arriving units within horizon | 2,000 | Same |
+| Purchase expenditure | USD 50,135.00 | Same |
+| Holding cost | USD 167.4124 | USD 170.0254 |
+| Closing inventory on day 30 | 126 units | 128 units |
+| Outstanding units on day 30 | 500 | Same |
+
+Every decision spends USD 10,027 and leaves USD 9,973 to expire. Of the final
+500 pending units, 170 are due on day 32 and 330 on day 34. Phase 2A initial
+824 plus 2,000 arrivals reconciled to 2,698 sales plus 126 closing. Phase 3A
+has 827 + 2,000 = 2,699 + 128 units. The 500
+pending units are not physically available stock. Buying the same quantity for
+every product under-replenishes many products and creates shortages despite
+unused budget; this is not evidence that the budget itself is insufficient.
+
+These are single-scenario simulation outcomes, distinct from the catalog's
+expected weekly replenishment cost of USD 17,390.72. There is no multi-seed
+strategy evaluation or statistical superiority claim.
+
+Reproduce in memory, without changing generated CSV files:
+
+```python
+from adaptive_decision_agent.data.synthetic import generate_data
+from adaptive_decision_agent.simulation import simulate
+
+catalog, history, demand = generate_data(seed=42)
+schedule = {
+    day: {product: 10 for product in catalog.product_id}
+    for day in (1, 8, 15, 22, 29)
+}
+result = simulate(catalog, demand, order_schedule=schedule, historical_demand=history)
+print(result.daily[["demand", "sales", "unmet_demand",
+                    "purchasing_expenditure", "holding_cost"]].sum())
+```
+
+The documentation review reproduced these values with Python 3.11.18, NumPy
+2.4.6, and pandas 3.1.1. Dependency versions and code revision are part of the
+reproduction context; the repository does not pin an exact environment lockfile.
 
 ## Limitations and verification
 

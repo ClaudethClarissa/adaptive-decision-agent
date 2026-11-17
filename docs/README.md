@@ -1,7 +1,15 @@
 # Documentation
 
-This directory is reserved for the environment specification, data schemas,
-methodology, experiment protocols, and findings as development progresses.
+Start with the [overview](project_overview.md), then the
+[mathematical model](mathematical_model.md) for equations and examples.
 
-The root README describes the initial scope and development roadmap. No
-simulation assumptions beyond that proposed scope have been implemented yet.
+| Guide | Scope |
+| --- | --- |
+| [Synthetic data](synthetic_data.md) | Implemented generation, calibration, and assumptions |
+| [Inventory simulation](inventory_simulation.md) | Implemented timing, policy boundary, and verified example |
+| [Experimental design](experimental_design.md) | Proposed fair comparisons; no strategy study has been performed |
+| [Development log](development_log.md) | Actual commits and important design decisions |
+
+Phase 3A adds 60 historical days and sample-mean inventory initialization.
+The [root README](../README.md) provides setup and the roadmap. Full forecasting,
+optimization, and an agentic AI system are not implemented.
