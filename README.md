@@ -7,8 +7,9 @@ with simple rules and mathematical optimization.
 
 **Current status:** reproducible synthetic data generation and a deterministic
 inventory simulator are implemented, including a preliminary historical sample
-mean for initialization. **No full forecasting model, optimization
-algorithm, or agentic AI system has been implemented yet.** The name describes
+mean for initialization. Phase 3B adds expanding/14-day/30-day mean forecasts,
+historical EDA, and rolling-origin validation. **No purchasing optimization
+algorithm or agentic AI system has been implemented yet.** The name describes
 the intended direction, not a demonstrated AI capability.
 
 ## Implemented foundation
@@ -23,6 +24,9 @@ the intended direction, not a demonstrated AI capability.
 - Order pipelines and separate purchasing and inventory holding-cost ledgers.
 - External schedules or callbacks with decision-time observations, checked by
   non-anticipativity tests that exclude current/future demand from policy inputs.
+- Observed-history point forecasts at configurable horizons, including weekly
+  totals, validated on three historical seven-day holdouts. Optional Poisson
+  candidate scores are kept separate from point errors.
 
 The budget is USD 20,000 on days 1, 8, 15, 22, and 29; unused funds expire each
 period. Seed 42 has a historical weekly replacement estimate of **USD 17,601.28
@@ -41,13 +45,14 @@ Daily simulator <--- external schedule / callback [implemented]
              v
 Inventory, order, and cost ledgers [implemented]
 
-Future: historical demand -> forecasts -> rules / optimizer / LLM tools
-        -> common simulator -> repeated evaluation -> dashboard
+Historical demand -> point forecasts + temporal validation [implemented]
+Future: forecasts -> purchasing rules / optimizer / LLM tools
+        -> common simulator -> repeated policy evaluation -> dashboard
 ```
 
 Source lives in `src/adaptive_decision_agent/`. The `data/` and `simulation/`
-packages contain implementations; `forecasting/`, `optimization/`, `agents/`,
-and `evaluation/` are placeholders. Tests live in `tests/`. Generated CSVs in
+packages and `forecasting/` contain implementations; `optimization/`, `agents/`,
+and `evaluation/` remain placeholders. Tests live in `tests/`. Generated CSVs in
 `data/raw/` are Git-ignored.
 
 ## Installation and testing
@@ -69,8 +74,15 @@ invoke its interpreter directly without changing `base` or creating another envi
 & 'C:\Anaconda3\envs\adaptive-agent\python.exe' -m adaptive_decision_agent.data.synthetic --seed 42 --output-dir data/raw
 ```
 
-The Phase 3A verification run passes **97 tests** covering data validity,
+The Phase 3B verification run passes **127 tests** covering data validity,
 accounting, timing, budgets, reproducibility, and policy information boundaries.
+Forecasting tests also cover exact means, horizon aggregation, temporal splits,
+fixed-origin non-anticipativity, and metric definitions. Matplotlib is available
+through the optional `analysis` extra for reproducible plots; core forecasting
+does not depend on it.
+The expanding mean is the accepted provisional forecasting baseline based on
+historical validation; statistical superiority is not claimed. Full-history
+EDA is descriptive and does not tune individual validation-fold models.
 The fixed-order demonstration is a correctness example, not an optimization benchmark.
 
 ## Documentation
@@ -81,6 +93,7 @@ The fixed-order demonstration is a correctness example, not an optimization benc
 | [Mathematical model](docs/mathematical_model.md) | Equations, units, numerical examples, and assumptions |
 | [Synthetic data](docs/synthetic_data.md) | Generation, calibration, and reproducibility |
 | [Inventory simulation](docs/inventory_simulation.md) | Timing, API, accounting, and verified demonstration |
+| [Demand forecasting](docs/demand_forecasting.md) | Historical-only EDA, point forecasts, validation, and limitations |
 | [Experimental design](docs/experimental_design.md) | Proposed fair comparisons and statistical evaluation |
 | [Development log](docs/development_log.md) | Milestones and design decisions grounded in Git history |
 
@@ -91,7 +104,7 @@ The fixed-order demonstration is a correctness example, not an optimization benc
 - [x] Deterministic simulator and policy information boundary.
 - [x] Historical demand, sample-mean initialization, and validated prehistory inputs.
 - [ ] Define final evaluation objectives, metrics, and terminal accounting.
-- [ ] Implement historical-demand forecasting and time-ordered validation.
+- [x] Implement initial mean-based forecasts and historical rolling-origin validation.
 - [ ] Implement simple purchasing rules and mathematical optimization.
 - [ ] Implement an LLM-based tool-using decision-support system.
 - [ ] Compare strategies across common scenarios with uncertainty estimates.

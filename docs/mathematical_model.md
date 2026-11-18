@@ -1,7 +1,8 @@
 # Mathematical model implemented so far
 
-This guide explains implemented data generation and accounting, not a forecasting
-or optimization model. All currency is illustrative USD. Product index $i$ runs
+This guide explains data generation and accounting. Implemented forecasting
+equations and validation are in [demand forecasting](demand_forecasting.md);
+no purchasing optimization is implemented. All currency is illustrative USD. Product index $i$ runs
 from 1 to 50; day index $t$ runs from 1 to $T=30$. The engine also accepts smaller
 catalogs and horizons for tests. Historical day index $s$ runs from -59 through
 0; evaluation day index $t$ remains 1-30. Each interval is $\Delta=1$ day.

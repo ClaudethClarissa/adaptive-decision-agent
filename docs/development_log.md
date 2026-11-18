@@ -82,8 +82,8 @@ The pre-Phase-3A documentation review verified **79 passing tests**: 36 generato
 43 simulator cases after pytest parametrization. These are verified historical
 counts, not asserted counts for every intermediate development step.
 
-Full forecasting, optimization, an LLM system, comparative evaluation, and a dashboard
-remain unimplemented. The initial documentation-only review left source and tests
+At that review, full forecasting, optimization, an LLM system, comparative
+evaluation, and a dashboard were unimplemented. The initial documentation-only review left source and tests
 unchanged; Phase 3A subsequently added historical initialization. The [experimental design](experimental_design.md)
 is a proposal, not a report of completed experiments.
 
@@ -101,10 +101,29 @@ preservation of all 1,500 evaluation observations. The public generator now
 returns three tables and exports no true rates. Simulator prehistory is optional
 for backward-compatible accounting, but should be supplied for Phase 3A policies.
 
-The current run passes 97 tests. Seed 42 has 827 initial units (previously 824),
+The Phase 3A run passed 97 tests. Seed 42 has 827 initial units (previously 824),
 mean estimated rate 2.531 versus true mean 2.5146, and estimated weekly replacement
 cost USD 17,601.28 versus unchanged true expectation USD 17,390.72. This milestone
 consolidates historical initialization and the research documentation. Use Git
 history for its commit identifier rather than embedding a self-referential hash.
 Existing documentation drafts,
 historical milestones, and explanations are preserved and updated for this phase.
+
+## Phase 3B: historical EDA and initial forecasting
+
+The forecasting package adds expanding, 14-day, and 30-day means, configurable
+daily/horizon-total predictions, and three historical rolling-origin folds.
+Development reads only the 60-day historical demand CSV, without generator
+internals, latent rates, or evaluation observations. Descriptive evidence makes
+a stationary Poisson distribution a plausible separately scored candidate, not
+an assumed truth. No uncertainty interval or statistical superiority is claimed.
+
+The expanding mean has the lowest pooled daily and weekly MAE/RMSE in the
+historical comparison; rankings differ for individual products and one daily
+fold. Detailed scores and limitations are in [demand forecasting](demand_forecasting.md).
+The current run passes 127 tests. Matplotlib is an optional analysis dependency;
+the core forecasters need only existing NumPy/pandas dependencies. The generator
+and simulator are unchanged. The expanding mean was accepted as the provisional
+baseline without a statistical-superiority claim. Full-history EDA includes
+development holdouts but does not tune individual fold models; their fits use
+only their corresponding training observations.

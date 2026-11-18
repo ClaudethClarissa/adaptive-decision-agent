@@ -1,10 +1,16 @@
 # Proposed experimental design
 
-**Status: proposal, not completed evaluation.** The generator and simulator are
-implemented, including historical sample-mean initialization. Full forecasting,
-optimization, an LLM agent, a comparative evaluation
-runner, statistical performance studies, and a dashboard are not implemented.
+**Status: proposed purchasing-strategy evaluation.** The generator, simulator,
+historical initialization, and Phase 3B mean-based forecasting/temporal validation
+are implemented. Optimization, an LLM agent, a purchasing-strategy comparison
+runner, statistical superiority studies, and a dashboard are not implemented.
 The fixed-order demonstration tests accounting, not strategy superiority.
+
+[Demand forecasting](demand_forecasting.md) reports a separate completed
+historical-development comparison of expanding, 14-day, and 30-day means.
+The three specified seven-day holdouts use only days -59 through 0. Days 1-30
+have not been used to select forecasters. That comparison is not a purchasing
+strategy evaluation and includes no significance or probabilistic-calibration claim.
 
 ## Intended comparisons
 
@@ -17,8 +23,9 @@ relative to simpler methods under equal information and operating constraints.
 | Mathematical optimization | Explicit quantitative baseline using forecasts and constraints | Objective, uncertainty treatment, planning horizon, solver |
 | LLM-based decision support | Inspect state, request tool outputs, propose orders | Tools, prompts, model, validation, failure handling |
 
-No particular forecast family, solver, LLM provider, or superiority result is
-established. If an LLM calls the same optimizer, comparisons must distinguish
+Three initial point-forecast methods are implemented; the expanding mean is a
+provisional reference based on historical errors. No solver, LLM provider, or
+superiority result is established. If an LLM calls the same optimizer, comparisons must distinguish
 reasoning from tool access rather than giving one method better information.
 
 ## Fair information and historical demand
@@ -33,7 +40,10 @@ Fit forecasts on observations strictly before the decision. Use time-ordered
 validation, not random shuffling of days. Phase 3A supplies 60 historical days
 (-59 through 0) before day 1. Every method must receive this same initial history;
 future evaluation observations cannot be training data. The implemented sample
-mean is an initialization estimate, not a completed forecasting comparison.
+mean used to initialize stock remains fixed by Phase 3A. Phase 3B forecasting
+fits only each origin's preceding observations, with no within-holdout updates.
+All purchasing methods should use an agreed forecast/tool-information protocol
+to distinguish decision quality from unequal forecast access.
 
 The day-8 non-anticipativity test checks that changing demand from day 8 onward
 does not change observations at that decision when earlier actions and demand
@@ -103,7 +113,9 @@ is a candidate; sample size and test choice need an explicit protocol.
 Report distributions and failure cases, not just average rankings. Predefine
 primary comparisons and address multiple comparisons if many metrics/methods
 are tested. No confidence intervals, significance tests, power studies, or
-strategy rankings have been produced so far.
+purchasing-strategy rankings have been produced so far. The historical forecast
+scores are descriptive rankings only. Full-history EDA includes development
+holdouts, so confirmatory claims require subsequent untouched evaluation.
 
 ## Weaknesses and future sensitivity checks
 
