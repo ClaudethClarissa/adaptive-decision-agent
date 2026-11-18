@@ -6,7 +6,7 @@ Can a tool-using LLM support feasible inventory purchasing decisions that compar
 favorably with simple rules and traditional optimization, given the same budget,
 information, and operating conditions? This is the planned research question.
 Historical initialization and three simple mean-based forecasters with temporal
-validation are implemented. No purchasing optimization algorithm or agentic AI
+validation and an order-up-to purchasing heuristic are implemented. No mathematical purchasing optimization algorithm or agentic AI
 system has been implemented yet.
 
 Inventory is a sequential decision problem: purchases consume money now,
@@ -28,6 +28,7 @@ a setting to evaluate agentic reasoning; it does not demonstrate that it helps.
 | Simulator | Inventory transitions, delayed orders, lost sales, expiring budgets, separate cost ledgers | [engine.py](../src/adaptive_decision_agent/simulation/engine.py) |
 | Decision interface | External schedules or callbacks with known information and past demand | Same engine |
 | Forecasting | Expanding/14-day/30-day means, horizon totals, EDA, historical validation | [forecasting](../src/adaptive_decision_agent/forecasting/) |
+| Replenishment rule | Expanding-mean target position and proportional budget allocation | [policies](../src/adaptive_decision_agent/policies/) |
 | Tests | Reproducibility, validity, conservation, timing, invalid inputs, non-anticipativity | [tests](../tests/) |
 
 The generator supplies 50 products, 3 suppliers, 60 historical days (-59 through
@@ -50,7 +51,9 @@ illustrative budget headroom, not profitability or a guaranteed service level.
    on historical holdouts without future evaluation observations. See
    [forecasting evidence](demand_forecasting.md); point errors do not imply
    probabilistic calibration or effective purchasing decisions.
-4. A future optimizer would convert forecasts and constraints into order quantities.
+4. The [replenishment rule](replenishment_baseline.md) converts forecasts and
+   inventory position into quantities with budget rationing. A future optimizer
+   would replace this heuristic with an explicit mathematical objective.
 5. A future LLM system would call defined tools and propose orders through the
    same validation boundary. Accounting remains the simulator's responsibility.
 6. A future evaluation runner would compare strategies on common scenarios;

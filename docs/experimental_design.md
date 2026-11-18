@@ -1,10 +1,20 @@
 # Proposed experimental design
 
 **Status: proposed purchasing-strategy evaluation.** The generator, simulator,
-historical initialization, and Phase 3B mean-based forecasting/temporal validation
-are implemented. Optimization, an LLM agent, a purchasing-strategy comparison
-runner, statistical superiority studies, and a dashboard are not implemented.
+historical initialization, Phase 3B forecasting/temporal validation, and Phase 4A
+order-up-to replenishment are implemented. A single-scenario demonstration runner
+compares that rule with the fixed-order schedule. Optimization, an LLM agent,
+a multi-scenario evaluation framework, statistical superiority studies, and a
+dashboard are not implemented.
 The fixed-order demonstration tests accounting, not strategy superiority.
+
+[Replenishment baseline](replenishment_baseline.md) documents the implemented
+expanding-mean rule, lead + seven review + two safety days, and deterministic
+budget rationing. The existing seed-42 evaluation path is now used for its
+single-scenario inventory comparison, after the forecasting baseline was frozen.
+No evaluation observations are used before their decision-time availability.
+No policy parameters were tuned against this result. The scenario was previously
+inspected in simulator development and is not an independent confirmatory test.
 
 [Demand forecasting](demand_forecasting.md) reports a separate completed
 historical-development comparison of expanding, 14-day, and 30-day means.
@@ -19,7 +29,7 @@ relative to simpler methods under equal information and operating constraints.
 
 | Proposed method | Purpose | Decisions still needed |
 | --- | --- | --- |
-| Simple purchasing rules | Transparent baseline, such as ordering toward a coverage target | Demand estimator, safety allowance, budget rationing |
+| Simple purchasing rules (implemented) | Expanding-mean order-up-to rule | Fixed R=7, safety=2, and proportional remainder budget allocation; sensitivity analysis remains future work |
 | Mathematical optimization | Explicit quantitative baseline using forecasts and constraints | Objective, uncertainty treatment, planning horizon, solver |
 | LLM-based decision support | Inspect state, request tool outputs, propose orders | Tools, prompts, model, validation, failure handling |
 
@@ -113,7 +123,8 @@ is a candidate; sample size and test choice need an explicit protocol.
 Report distributions and failure cases, not just average rankings. Predefine
 primary comparisons and address multiple comparisons if many metrics/methods
 are tested. No confidence intervals, significance tests, power studies, or
-purchasing-strategy rankings have been produced so far. The historical forecast
+statistically validated purchasing-strategy rankings have been produced so far.
+The seed-42 rule/fixed-order simulation comparison is descriptive only. The historical forecast
 scores are descriptive rankings only. Full-history EDA includes development
 holdouts, so confirmatory claims require subsequent untouched evaluation.
 

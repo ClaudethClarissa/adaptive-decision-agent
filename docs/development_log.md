@@ -127,3 +127,21 @@ and simulator are unchanged. The expanding mean was accepted as the provisional
 baseline without a statistical-superiority claim. Full-history EDA includes
 development holdouts but does not tune individual fold models; their fits use
 only their corresponding training observations.
+
+## Phase 4A: rule-based replenishment
+
+The new `policies` package combines the accepted expanding-mean forecaster with
+an order-up-to target covering lead time, a seven-day review interval, and two
+additional days. Current stock and pending orders reduce desired purchases.
+Exact-cent proportional rationing with deterministic fractional-remainder
+ranking handles an insufficient period budget. It is a heuristic, not an optimizer.
+
+The seed-42 evaluation comparison fulfills 3,764/3,849 units versus 2,699 for
+the fixed ten-unit schedule. Costs and terminal inventory are higher, and no
+decision binds the normal budget. Lower-budget integration and hand-calculated
+allocation tests verify rationing separately. The complete suite passes 158
+tests. Generator and simulator accounting are unchanged; no optimization or
+AI functionality is added. The rule was accepted as the initial benchmark
+without an optimality or superiority claim. Final review reconciled both runs
+against identical seed-42 inputs and clarified that unvalued terminal assets
+retain potential economic value, so purchase expenditure does not measure profit.

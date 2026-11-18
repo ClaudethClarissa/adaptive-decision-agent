@@ -8,7 +8,8 @@ with simple rules and mathematical optimization.
 **Current status:** reproducible synthetic data generation and a deterministic
 inventory simulator are implemented, including a preliminary historical sample
 mean for initialization. Phase 3B adds expanding/14-day/30-day mean forecasts,
-historical EDA, and rolling-origin validation. **No purchasing optimization
+historical EDA, and rolling-origin validation. Phase 4A adds an interpretable
+order-up-to replenishment baseline. **No purchasing optimization
 algorithm or agentic AI system has been implemented yet.** The name describes
 the intended direction, not a demonstrated AI capability.
 
@@ -27,6 +28,8 @@ the intended direction, not a demonstrated AI capability.
 - Observed-history point forecasts at configurable horizons, including weekly
   totals, validated on three historical seven-day holdouts. Optional Poisson
   candidate scores are kept separate from point errors.
+- Order-up-to purchasing using expanding-mean demand, stock plus pending orders,
+  and deterministic proportional budget allocation when desired orders do not fit.
 
 The budget is USD 20,000 on days 1, 8, 15, 22, and 29; unused funds expire each
 period. Seed 42 has a historical weekly replacement estimate of **USD 17,601.28
@@ -46,12 +49,13 @@ Daily simulator <--- external schedule / callback [implemented]
 Inventory, order, and cost ledgers [implemented]
 
 Historical demand -> point forecasts + temporal validation [implemented]
-Future: forecasts -> purchasing rules / optimizer / LLM tools
+Forecasts + inventory -> rule-based replenishment -> simulator [implemented]
+Future: forecasts -> optimizer / LLM tools
         -> common simulator -> repeated policy evaluation -> dashboard
 ```
 
 Source lives in `src/adaptive_decision_agent/`. The `data/` and `simulation/`
-packages and `forecasting/` contain implementations; `optimization/`, `agents/`,
+packages, `forecasting/`, and `policies/` contain implementations; `optimization/`, `agents/`,
 and `evaluation/` remain placeholders. Tests live in `tests/`. Generated CSVs in
 `data/raw/` are Git-ignored.
 
@@ -74,7 +78,7 @@ invoke its interpreter directly without changing `base` or creating another envi
 & 'C:\Anaconda3\envs\adaptive-agent\python.exe' -m adaptive_decision_agent.data.synthetic --seed 42 --output-dir data/raw
 ```
 
-The Phase 3B verification run passes **127 tests** covering data validity,
+The Phase 4A verification run passes **158 tests** covering data validity,
 accounting, timing, budgets, reproducibility, and policy information boundaries.
 Forecasting tests also cover exact means, horizon aggregation, temporal splits,
 fixed-origin non-anticipativity, and metric definitions. Matplotlib is available
@@ -83,6 +87,13 @@ does not depend on it.
 The expanding mean is the accepted provisional forecasting baseline based on
 historical validation; statistical superiority is not claimed. Full-history
 EDA is descriptive and does not tune individual validation-fold models.
+On the seed-42 evaluation scenario, the order-up-to baseline fills 97.79% of
+demand versus 70.12% for the fixed ten-unit schedule, with higher purchasing and
+holding costs. This single-scenario result is not evidence of optimality or
+statistical superiority; see the baseline guide for terminal-order accounting.
+Ending stock and paid outstanding orders retain potential economic value.
+Purchase expenditure alone is not a profitability comparison; the simulator
+does not apply terminal asset valuation or compute profit.
 The fixed-order demonstration is a correctness example, not an optimization benchmark.
 
 ## Documentation
@@ -94,6 +105,7 @@ The fixed-order demonstration is a correctness example, not an optimization benc
 | [Synthetic data](docs/synthetic_data.md) | Generation, calibration, and reproducibility |
 | [Inventory simulation](docs/inventory_simulation.md) | Timing, API, accounting, and verified demonstration |
 | [Demand forecasting](docs/demand_forecasting.md) | Historical-only EDA, point forecasts, validation, and limitations |
+| [Replenishment baseline](docs/replenishment_baseline.md) | Order-up-to rule, budget heuristic, and seed-42 comparison |
 | [Experimental design](docs/experimental_design.md) | Proposed fair comparisons and statistical evaluation |
 | [Development log](docs/development_log.md) | Milestones and design decisions grounded in Git history |
 
@@ -105,7 +117,8 @@ The fixed-order demonstration is a correctness example, not an optimization benc
 - [x] Historical demand, sample-mean initialization, and validated prehistory inputs.
 - [ ] Define final evaluation objectives, metrics, and terminal accounting.
 - [x] Implement initial mean-based forecasts and historical rolling-origin validation.
-- [ ] Implement simple purchasing rules and mathematical optimization.
+- [x] Implement the order-up-to purchasing rule and proportional budget heuristic.
+- [ ] Implement a mathematical optimization purchasing baseline.
 - [ ] Implement an LLM-based tool-using decision-support system.
 - [ ] Compare strategies across common scenarios with uncertainty estimates.
 - [ ] Build a Streamlit dashboard and publish findings and limitations.
